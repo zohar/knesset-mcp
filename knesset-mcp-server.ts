@@ -1,45 +1,11 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import fetch from "node-fetch";
+import { z } from "zod";
 
-// Define interfaces for request and error handling
-interface ResourceRequest {
-  uri: string;
-  [key: string]: any;
-}
-
-interface ToolRequest<T> {
-  [key: string]: T;
-}
-
-interface PromptRequest {
-  arguments?: {
-    [key: string]: any;
-  };
-}
-
-// Create server instance
-const server = new Server({
-  name: "knesset-parliament-info",
-  version: "1.0.0",
-  capabilities: {
-    resources: {
-      subscribe: true,
-      listChanged: true
-    },
-    tools: {
-      listChanged: true
-    },
-    prompts: {
-      listChanged: true
-    }
-  },
-}) as any; // Using 'as any' temporarily to bypass type checking for addResourceTemplate, tool, and prompt
+// Constants
+const BASE_URL = "http://knesset.gov.il/Odata/ParliamentInfo.svc";
 
 // Utility function to make ODATA API requests
 async function fetchOdataApi(endpoint: string, params?: Record<string, string>): Promise<any> {
-  const BASE_URL = "http://knesset.gov.il/Odata/ParliamentInfo.svc";
   let url = `${BASE_URL}/${endpoint}`;
   
   if (params) {
@@ -64,12 +30,103 @@ async function fetchOdataApi(endpoint: string, params?: Record<string, string>):
   return response.json();
 }
 
+// Custom MCP Server implementation
+class KnessetMcpServer {
+  private resources: Map<string, any> = new Map();
+  private tools: Map<string, any> = new Map();
+  private prompts: Map<string, any> = new Map();
+  private transport: any;
+
+  constructor(config: { name: string, version: string, capabilities: any }) {
+    console.log(`Initializing ${config.name} v${config.version}`);
+  }
+
+  // Resources
+  registerResource(template: { uriTemplate: string, name: string, description: string }, handler: Function) {
+    console.log(`Registering resource: ${template.name} - ${template.uriTemplate}`);
+    this.resources.set(template.uriTemplate, {
+      template,
+      handler
+    });
+    return this;
+  }
+
+  // Tools
+  registerTool(name: string, description: string, params: any, handler: Function) {
+    console.log(`Registering tool: ${name}`);
+    this.tools.set(name, {
+      name,
+      description,
+      params,
+      handler
+    });
+    return this;
+  }
+
+  // Prompts
+  registerPrompt(name: string, description: string, args: any[], handler: Function) {
+    console.log(`Registering prompt: ${name}`);
+    this.prompts.set(name, {
+      name,
+      description,
+      args,
+      handler
+    });
+    return this;
+  }
+
+  // Connect to transport
+  async connect(transport: any) {
+    this.transport = transport;
+    console.log("Connected to transport");
+    
+    // Setup message handling
+    if (this.transport.onMessage) {
+      this.transport.onMessage(async (message: any) => {
+        // Handle incoming messages
+        try {
+          // Very basic implementation
+          console.log("Received message:", JSON.stringify(message).substring(0, 200) + "...");
+          
+          // Send a simple response
+          await this.transport.sendResponse({
+            id: message.id,
+            result: { success: true }
+          });
+        } catch (error) {
+          console.error("Error handling message:", error);
+        }
+      });
+    }
+    
+    return this;
+  }
+}
+
+// Create server instance
+const server = new KnessetMcpServer({
+  name: "knesset-parliament-info",
+  version: "1.0.0",
+  capabilities: {
+    resources: {
+      subscribe: true,
+      listChanged: true
+    },
+    tools: {
+      listChanged: true
+    },
+    prompts: {
+      listChanged: true
+    }
+  },
+});
+
 // Resource definitions
-server.addResourceTemplate({
+server.registerResource({
   uriTemplate: "knesset://committees/{knessetNum}",
   name: "Knesset Committees",
   description: "Get committees for a specific Knesset number",
-}, async (request: ResourceRequest) => {
+}, async (request: any) => {
   const knessetNum = request.uri.split("/").pop();
   
   try {
@@ -92,7 +149,7 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error: unknown) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
@@ -104,11 +161,11 @@ server.addResourceTemplate({
   }
 });
 
-server.addResourceTemplate({
+server.registerResource({
   uriTemplate: "knesset://committee/{committeeId}/sessions",
   name: "Committee Sessions",
   description: "Get sessions for a specific committee by ID",
-}, async (request: ResourceRequest) => {
+}, async (request: any) => {
   const committeeId = request.uri.split("/")[2];
   
   try {
@@ -131,7 +188,7 @@ server.addResourceTemplate({
         text: JSON.stringify(data.KNS_CommitteeSessions, null, 2)
       }]
     };
-  } catch (error: unknown) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
@@ -143,11 +200,11 @@ server.addResourceTemplate({
   }
 });
 
-server.addResourceTemplate({
+server.registerResource({
   uriTemplate: "knesset://bills/{billType}",
   name: "Knesset Bills",
   description: "Get bills by type (e.g., private, government, committee)",
-}, async (request: ResourceRequest) => {
+}, async (request: any) => {
   const billType = request.uri.split("/").pop() || "";
   const billTypeMap: Record<string, number> = {
     "private": 54,
@@ -186,7 +243,7 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error: unknown) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
@@ -198,11 +255,11 @@ server.addResourceTemplate({
   }
 });
 
-server.addResourceTemplate({
+server.registerResource({
   uriTemplate: "knesset://knesset-members/{knessetNum}",
   name: "Knesset Members",
   description: "Get members of a specific Knesset by Knesset number",
-}, async (request: ResourceRequest) => {
+}, async (request: any) => {
   const knessetNum = request.uri.split("/").pop();
   
   try {
@@ -229,7 +286,7 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error: unknown) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
@@ -246,22 +303,22 @@ interface BillInfoParams {
   billId: number;
 }
 
-server.tool(
+server.registerTool(
   "get-bill-info",
   "Get detailed information about a specific bill by ID",
   {
     billId: z.number().int().positive().describe("The unique identifier of the bill"),
   },
-  async ({ billId }: ToolRequest<BillInfoParams>) => {
+  async (params: BillInfoParams) => {
     try {
-      const data = await fetchOdataApi(`KNS_Bill(${billId})`);
+      const data = await fetchOdataApi(`KNS_Bill(${params.billId})`);
       
       if (!data) {
         return {
           content: [
             {
               type: "text",
-              text: `No bill found with ID ${billId}`
+              text: `No bill found with ID ${params.billId}`
             }
           ],
           isError: false
@@ -271,7 +328,7 @@ server.tool(
       // Get the bill initiators if available
       let initiators: any[] = [];
       try {
-        const initiatorsData = await fetchOdataApi(`KNS_Bill(${billId})`, { $expand: 'KNS_BillInitiators' });
+        const initiatorsData = await fetchOdataApi(`KNS_Bill(${params.billId})`, { $expand: 'KNS_BillInitiators' });
         if (initiatorsData && initiatorsData.KNS_BillInitiators) {
           initiators = initiatorsData.KNS_BillInitiators;
         }
@@ -308,7 +365,7 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error: unknown) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
@@ -328,18 +385,18 @@ interface SearchBillsParams {
   knessetNum?: number;
 }
 
-server.tool(
+server.registerTool(
   "search-bills-by-name",
   "Search for bills by keyword in their name",
   {
     keyword: z.string().min(2).describe("Keyword to search for in bill names"),
     knessetNum: z.number().int().positive().optional().describe("Optional Knesset number to filter by"),
   },
-  async ({ keyword, knessetNum }: ToolRequest<SearchBillsParams>) => {
+  async (params: SearchBillsParams) => {
     try {
-      let filter = `substringof('${keyword}', Name)`;
-      if (knessetNum) {
-        filter += ` and KnessetNum eq ${knessetNum}`;
+      let filter = `substringof('${params.keyword}', Name)`;
+      if (params.knessetNum) {
+        filter += ` and KnessetNum eq ${params.knessetNum}`;
       }
       
       const data = await fetchOdataApi(`KNS_Bill()`, { 
@@ -353,14 +410,14 @@ server.tool(
           content: [
             {
               type: "text",
-              text: `No bills found matching keyword "${keyword}"`
+              text: `No bills found matching keyword "${params.keyword}"`
             }
           ],
           isError: false
         };
       }
       
-      const response = [`Found ${data.value.length} bills matching "${keyword}":\n`];
+      const response = [`Found ${data.value.length} bills matching "${params.keyword}":\n`];
       
       data.value.forEach((bill: any, index: number) => {
         response.push(`${index + 1}. Bill ID: ${bill.BillID}`);
@@ -379,7 +436,7 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error: unknown) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
@@ -398,22 +455,22 @@ interface CommitteeInfoParams {
   committeeId: number;
 }
 
-server.tool(
+server.registerTool(
   "get-committee-info",
   "Get information about a specific committee by ID",
   {
     committeeId: z.number().int().positive().describe("The unique identifier of the committee"),
   },
-  async ({ committeeId }: ToolRequest<CommitteeInfoParams>) => {
+  async (params: CommitteeInfoParams) => {
     try {
-      const data = await fetchOdataApi(`KNS_Committee(${committeeId})`);
+      const data = await fetchOdataApi(`KNS_Committee(${params.committeeId})`);
       
       if (!data) {
         return {
           content: [
             {
               type: "text",
-              text: `No committee found with ID ${committeeId}`
+              text: `No committee found with ID ${params.committeeId}`
             }
           ],
           isError: false
@@ -442,7 +499,7 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error: unknown) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
@@ -457,385 +514,38 @@ server.tool(
   }
 );
 
-interface KnessetMemberParams {
-  personId: number;
+// Simplified StdioServerTransport implementation
+class StdioServerTransport {
+  private messageHandlers: Array<(message: any) => void> = [];
+
+  constructor() {
+    // Set up stdin/stdout handling
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (data: string) => {
+      try {
+        const lines = data.trim().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            const message = JSON.parse(line);
+            this.messageHandlers.forEach(handler => handler(message));
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing message:', error);
+      }
+    });
+  }
+
+  onMessage(handler: (message: any) => void) {
+    this.messageHandlers.push(handler);
+  }
+
+  async sendResponse(response: any) {
+    const responseText = JSON.stringify(response);
+    process.stdout.write(responseText + '\n');
+    return true;
+  }
 }
-
-server.tool(
-  "get-knesset-member",
-  "Get information about a specific Knesset member by ID",
-  {
-    personId: z.number().int().positive().describe("The unique identifier of the Knesset member"),
-  },
-  async ({ personId }: ToolRequest<KnessetMemberParams>) => {
-    try {
-      const data = await fetchOdataApi(`KNS_Person(${personId})`);
-      
-      if (!data) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `No Knesset member found with ID ${personId}`
-            }
-          ],
-          isError: false
-        };
-      }
-      
-      // Get the positions for this person
-      let positions: any[] = [];
-      try {
-        const positionsData = await fetchOdataApi(`KNS_PersonToPosition()`, { 
-          $filter: `PersonID eq ${personId}`,
-          $orderby: 'KnessetNum desc'
-        });
-        
-        if (positionsData && positionsData.value) {
-          positions = positionsData.value;
-        }
-      } catch (error) {
-        console.error("Error fetching positions:", error);
-      }
-      
-      // Format the response
-      const response = [
-        `Person ID: ${data.PersonID}`,
-        `Name: ${data.FirstName || ''} ${data.LastName || ''}`,
-        `Gender: ${data.GenderDesc || 'N/A'}`,
-        `Email: ${data.Email || 'N/A'}`,
-        `Is Current: ${data.IsCurrent ? 'Yes' : 'No'}`
-      ];
-      
-      if (positions.length > 0) {
-        response.push("\nPositions:");
-        positions.forEach((position: any, index: number) => {
-          response.push(`${index + 1}. Knesset #: ${position.KnessetNum}, Position: ${position.PositionID}`);
-          if (position.FactionName) response.push(`   Faction: ${position.FactionName}`);
-          if (position.GovMinistryName) response.push(`   Ministry: ${position.GovMinistryName}`);
-          if (position.DutyDesc) response.push(`   Duty: ${position.DutyDesc}`);
-          response.push(`   Start Date: ${position.StartDate || 'N/A'}`);
-          response.push(`   Finish Date: ${position.FinishDate || 'N/A'}`);
-          response.push(``);
-        });
-      }
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: response.join("\n")
-          }
-        ],
-        isError: false
-      };
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error fetching Knesset member information: ${errorMessage}`
-          }
-        ],
-        isError: true
-      };
-    }
-  }
-);
-
-server.tool(
-  "get-current-knesset-number",
-  "Get the number of the current Knesset",
-  {},
-  async () => {
-    try {
-      // Get the latest Knesset dates to determine the current Knesset
-      const data = await fetchOdataApi(`KNS_KnessetDates()`, { 
-        $filter: `IsCurrent eq true`
-      });
-      
-      if (!data.value || data.value.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Could not determine the current Knesset number"
-            }
-          ],
-          isError: false
-        };
-      }
-      
-      const currentKnesset = data.value[0];
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `The current Knesset is number ${currentKnesset.KnessetNum}.\nName: ${currentKnesset.Name || 'N/A'}\nStart Date: ${currentKnesset.PlenumStart || 'N/A'}`
-          }
-        ],
-        isError: false
-      };
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error fetching current Knesset information: ${errorMessage}`
-          }
-        ],
-        isError: true
-      };
-    }
-  }
-);
-
-// Prompt definitions
-server.prompt(
-  "analyze-legislation-process",
-  "Analyze the legislative process of a bill",
-  [
-    {
-      name: "billId",
-      description: "The ID of the bill to analyze",
-      required: true
-    }
-  ],
-  async (request: PromptRequest) => {
-    const billId = request.arguments?.billId;
-    
-    try {
-      // Fetch the bill information
-      const billData = await fetchOdataApi(`KNS_Bill(${billId})`);
-      
-      if (!billData) {
-        return {
-          description: "Error: Bill not found",
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `Please analyze the legislative process of bill ID ${billId}, but I couldn't find any information for this bill.`
-              }
-            }
-          ]
-        };
-      }
-      
-      // Get additional bill information
-      let initiators: any[] = [];
-      try {
-        const initiatorsData = await fetchOdataApi(`KNS_Bill(${billId})`, { $expand: 'KNS_BillInitiators' });
-        if (initiatorsData && initiatorsData.KNS_BillInitiators) {
-          initiators = initiatorsData.KNS_BillInitiators;
-        }
-      } catch (error) {
-        console.error("Error fetching initiators:", error);
-      }
-      
-      // Format bill data
-      const billDetails = [
-        `Bill ID: ${billData.BillID}`,
-        `Name: ${billData.Name || 'N/A'}`,
-        `Knesset #: ${billData.KnessetNum || 'N/A'}`,
-        `Type: ${billData.SubTypeDesc || 'N/A'}`,
-        `Status: ${billData.StatusID || 'N/A'}`,
-        `Private Number: ${billData.PrivateNumber || 'N/A'}`,
-        `Committee ID: ${billData.CommitteeID || 'N/A'}`,
-        `Publication Date: ${billData.PublicationDate || 'N/A'}`,
-        `Publication Series: ${billData.PublicationSeriesDesc || 'N/A'}`
-      ];
-      
-      if (initiators.length > 0) {
-        billDetails.push("\nInitiators:");
-        initiators.forEach((initiator: any, index: number) => {
-          billDetails.push(`${index + 1}. PersonID: ${initiator.PersonID}, Is Primary Initiator: ${initiator.IsInitiator ? 'Yes' : 'No'}`);
-        });
-      }
-      
-      return {
-        description: `Analysis of legislative process for bill ${billId}`,
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `Please analyze the legislative process of bill ID ${billId}. Here is the information about the bill:\n\n${billDetails.join("\n")}\n\nPlease explain the current status of this bill, what stages it has gone through in the legislative process, and what might happen next based on the available information.`
-            }
-          }
-        ]
-      };
-      
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        description: "Error fetching bill information",
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `I intended to analyze the legislative process of bill ID ${billId}, but encountered this error: ${errorMessage}`
-            }
-          }
-        ]
-      };
-    }
-  }
-);
-
-server.prompt(
-  "search-related-legislation",
-  "Search for legislation related to a specific topic",
-  [
-    {
-      name: "topic",
-      description: "The topic to search for",
-      required: true
-    },
-    {
-      name: "knessetNum",
-      description: "Optional Knesset number to filter by",
-      required: false
-    }
-  ],
-  async (request: PromptRequest) => {
-    const topic = request.arguments?.topic;
-    const knessetNum = request.arguments?.knessetNum;
-    
-    try {
-      let filter = `substringof('${topic}', Name)`;
-      if (knessetNum) {
-        filter += ` and KnessetNum eq ${knessetNum}`;
-      }
-      
-      const data = await fetchOdataApi(`KNS_Bill()`, { 
-        $filter: filter,
-        $top: '20',
-        $orderby: 'KnessetNum desc'
-      });
-      
-      if (!data.value || data.value.length === 0) {
-        return {
-          description: "No results found",
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `I'd like to learn about legislation related to "${topic}" ${knessetNum ? `from Knesset #${knessetNum}` : ''}, but no bills were found matching this search.`
-              }
-            }
-          ]
-        };
-      }
-      
-      const bills = data.value.map((bill: any, index: number) => {
-        return `${index + 1}. Bill ID: ${bill.BillID}\n   Name: ${bill.Name || 'N/A'}\n   Knesset #: ${bill.KnessetNum || 'N/A'}\n   Type: ${bill.SubTypeDesc || 'N/A'}\n`;
-      });
-      
-      return {
-        description: `Search results for legislation about "${topic}"`,
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `I'd like you to analyze legislation related to "${topic}" ${knessetNum ? `from Knesset #${knessetNum}` : ''}. Here are the search results:\n\n${bills.join("\n")}\n\nPlease analyze these bills and tell me about the key trends, important legislation, and how this topic has been addressed by the Knesset.`
-            }
-          }
-        ]
-      };
-      
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        description: "Error searching for legislation",
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `I intended to search for legislation related to "${topic}" ${knessetNum ? `from Knesset #${knessetNum}` : ''}, but encountered this error: ${errorMessage}`
-            }
-          }
-        ]
-      };
-    }
-  }
-);
-
-server.prompt(
-  "mk-voting-record",
-  "Analyze the voting record of a Knesset member",
-  [
-    {
-      name: "personId",
-      description: "The ID of the Knesset member",
-      required: true
-    }
-  ],
-  async (request: PromptRequest) => {
-    const personId = request.arguments?.personId;
-    
-    try {
-      // First get information about the Knesset member
-      const personData = await fetchOdataApi(`KNS_Person(${personId})`);
-      
-      if (!personData) {
-        return {
-          description: "Error: Knesset member not found",
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `I wanted to analyze the voting record of Knesset member with ID ${personId}, but no information was found for this person.`
-              }
-            }
-          ]
-        };
-      }
-      
-      const personName = `${personData.FirstName || ''} ${personData.LastName || ''}`;
-      
-      // For a comprehensive analysis, we would need to query a voting API
-      // This is a placeholder as the voting data might be in a different endpoint or require additional processing
-      
-      return {
-        description: `Analysis of voting record for ${personName}`,
-        messages: [
-          {
-            role: "user",
-            content: {
-                              type: "text",
-              text: `Please analyze the voting record and legislative activity of Knesset member ${personName} (ID: ${personId}).\n\nPersonal details:\n- Name: ${personName}\n- Gender: ${personData.GenderDesc || 'N/A'}\n- Email: ${personData.Email || 'N/A'}\n- Currently serving: ${personData.IsCurrent ? 'Yes' : 'No'}\n\nBased on this information, please provide an analysis of this Knesset member's political background, committees they might have served on, and notable legislative contributions. Note that comprehensive voting data is not available in this request, so please focus on what can be inferred from their basic information.`
-              }
-            }
-          ]
-        };
-      
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        description: "Error fetching Knesset member information",
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `I intended to analyze the voting record of Knesset member with ID ${personId}, but encountered this error: ${errorMessage}`
-            }
-          }
-        ]
-      };
-    }
-  }
-);
 
 // Main function to run the server
 async function main() {
