@@ -85,7 +85,13 @@ class KnessetMcpServer {
       this.transport.onMessage(async (message: any) => {
         // Handle incoming messages
         try {
-          console.error(`Received request: ${message.method}`);
+          // Check if this is a valid JSON-RPC 2.0 message
+          if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0') {
+            console.error(`Invalid JSON-RPC message:`, message);
+            return;
+          }
+
+          console.error(`Received request: ${message.method} (ID: ${message.id})`);
           
           if (message.method === "initialize") {
             // Handle initialize request
@@ -639,25 +645,49 @@ server.registerTool(
 // Improved StdioServerTransport implementation following JSON-RPC 2.0 protocol
 class StdioServerTransport {
   private messageHandlers: Array<(message: any) => void> = [];
-  private debug: boolean = false;
+  private debug: boolean = true;
 
   constructor() {
     // Set up stdin/stdout handling
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (data: string) => {
+    
+    let buffer = '';
+    process.stdin.on('data', (chunk: string) => {
       try {
-        const lines = data.trim().split('\n');
-        for (const line of lines) {
+        buffer += chunk;
+        
+        // Process complete messages (may have multiple messages or partial messages)
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+          
           if (line.trim()) {
             if (this.debug) console.error(`[DEBUG] Received: ${line}`);
-            const message = JSON.parse(line);
-            this.messageHandlers.forEach(handler => handler(message));
+            try {
+              const message = JSON.parse(line);
+              this.messageHandlers.forEach(handler => handler(message));
+            } catch (jsonError) {
+              console.error('Error parsing JSON message:', jsonError);
+            }
           }
         }
       } catch (error) {
-        console.error('Error parsing message:', error);
+        console.error('Error processing input data:', error);
       }
     });
+    
+    // Handle stdin closing
+    process.stdin.on('end', () => {
+      console.error('stdin stream ended');
+    });
+    
+    process.stdin.on('error', (err) => {
+      console.error('stdin error:', err);
+    });
+    
+    // Keep the process alive
+    setInterval(() => {}, 10000);
   }
 
   onMessage(handler: (message: any) => void) {
@@ -665,46 +695,76 @@ class StdioServerTransport {
   }
 
   async sendResponse(response: any) {
-    // Format as proper JSON-RPC 2.0 response
-    const jsonRpcResponse = {
-      jsonrpc: "2.0",
-      id: response.id,
-      result: response.result
-    };
-    
-    const responseText = JSON.stringify(jsonRpcResponse);
-    if (this.debug) console.error(`[DEBUG] Sending: ${responseText}`);
-    process.stdout.write(responseText + '\n');
-    return true;
+    try {
+      // Format as proper JSON-RPC 2.0 response
+      const jsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: response.id,
+        result: response.result
+      };
+      
+      const responseText = JSON.stringify(jsonRpcResponse);
+      if (this.debug) console.error(`[DEBUG] Sending: ${responseText}`);
+      process.stdout.write(responseText + '\n');
+      return true;
+    } catch (error) {
+      console.error("Error sending response:", error);
+      return false;
+    }
   }
 
   async sendError(id: string | number | null, error: any) {
-    // Format as proper JSON-RPC 2.0 error response
-    const jsonRpcError = {
-      jsonrpc: "2.0",
-      id: id,
-      error: {
-        code: error.code || -32603,
-        message: error.message || "Internal error",
-        data: error.data
-      }
-    };
-    
-    const errorText = JSON.stringify(jsonRpcError);
-    if (this.debug) console.error(`[DEBUG] Sending error: ${errorText}`);
-    process.stdout.write(errorText + '\n');
-    return true;
+    try {
+      // Format as proper JSON-RPC 2.0 error response
+      const jsonRpcError = {
+        jsonrpc: "2.0",
+        id: id,
+        error: {
+          code: error.code || -32603,
+          message: error.message || "Internal error",
+          data: error.data
+        }
+      };
+      
+      const errorText = JSON.stringify(jsonRpcError);
+      if (this.debug) console.error(`[DEBUG] Sending error: ${errorText}`);
+      process.stdout.write(errorText + '\n');
+      return true;
+    } catch (error) {
+      console.error("Error sending error response:", error);
+      return false;
+    }
   }
 }
 
 // Main function to run the server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Knesset MCP Server running on stdio");
+  try {
+    console.error("Starting Knesset MCP Server...");
+    
+    // Prevent the process from exiting when an uncaught exception occurs
+    process.on('uncaughtException', (err) => {
+      console.error('Uncaught exception:', err);
+    });
+    
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    });
+    
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    
+    console.error("Knesset MCP Server running on stdio");
+    
+    // Keep the process alive
+    setInterval(() => {
+      // Heartbeat
+    }, 5000);
+  } catch (error) {
+    console.error("Error in main:", error);
+  }
 }
 
 main().catch((error) => {
   console.error("Fatal error in main():", error);
-  process.exit(1);
 });
