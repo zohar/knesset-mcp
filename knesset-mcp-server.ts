@@ -3,7 +3,21 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import fetch from "node-fetch";
 
-const BASE_URL = "http://knesset.gov.il/Odata/ParliamentInfo.svc";
+// Define interfaces for request and error handling
+interface ResourceRequest {
+  uri: string;
+  [key: string]: any;
+}
+
+interface ToolRequest<T> {
+  [key: string]: T;
+}
+
+interface PromptRequest {
+  arguments?: {
+    [key: string]: any;
+  };
+}
 
 // Create server instance
 const server = new Server({
@@ -21,10 +35,11 @@ const server = new Server({
       listChanged: true
     }
   },
-});
+}) as any; // Using 'as any' temporarily to bypass type checking for addResourceTemplate, tool, and prompt
 
 // Utility function to make ODATA API requests
 async function fetchOdataApi(endpoint: string, params?: Record<string, string>): Promise<any> {
+  const BASE_URL = "http://knesset.gov.il/Odata/ParliamentInfo.svc";
   let url = `${BASE_URL}/${endpoint}`;
   
   if (params) {
@@ -54,7 +69,7 @@ server.addResourceTemplate({
   uriTemplate: "knesset://committees/{knessetNum}",
   name: "Knesset Committees",
   description: "Get committees for a specific Knesset number",
-}, async (request) => {
+}, async (request: ResourceRequest) => {
   const knessetNum = request.uri.split("/").pop();
   
   try {
@@ -77,12 +92,13 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
         uri: request.uri,
         mimeType: "application/json",
-        text: JSON.stringify({ error: `Failed to fetch committees: ${error.message}` }, null, 2)
+        text: JSON.stringify({ error: `Failed to fetch committees: ${errorMessage}` }, null, 2)
       }]
     };
   }
@@ -92,7 +108,7 @@ server.addResourceTemplate({
   uriTemplate: "knesset://committee/{committeeId}/sessions",
   name: "Committee Sessions",
   description: "Get sessions for a specific committee by ID",
-}, async (request) => {
+}, async (request: ResourceRequest) => {
   const committeeId = request.uri.split("/")[2];
   
   try {
@@ -115,12 +131,13 @@ server.addResourceTemplate({
         text: JSON.stringify(data.KNS_CommitteeSessions, null, 2)
       }]
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
         uri: request.uri,
         mimeType: "application/json",
-        text: JSON.stringify({ error: `Failed to fetch committee sessions: ${error.message}` }, null, 2)
+        text: JSON.stringify({ error: `Failed to fetch committee sessions: ${errorMessage}` }, null, 2)
       }]
     };
   }
@@ -130,15 +147,15 @@ server.addResourceTemplate({
   uriTemplate: "knesset://bills/{billType}",
   name: "Knesset Bills",
   description: "Get bills by type (e.g., private, government, committee)",
-}, async (request) => {
-  const billType = request.uri.split("/").pop();
-  const billTypeMap = {
+}, async (request: ResourceRequest) => {
+  const billType = request.uri.split("/").pop() || "";
+  const billTypeMap: Record<string, number> = {
     "private": 54,
     "government": 53,
     "committee": 55
   };
   
-  const billTypeId = billTypeMap[billType];
+  const billTypeId = billTypeMap[billType as keyof typeof billTypeMap];
   if (!billTypeId) {
     return {
       contents: [{
@@ -169,12 +186,13 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
         uri: request.uri,
         mimeType: "application/json",
-        text: JSON.stringify({ error: `Failed to fetch bills: ${error.message}` }, null, 2)
+        text: JSON.stringify({ error: `Failed to fetch bills: ${errorMessage}` }, null, 2)
       }]
     };
   }
@@ -184,7 +202,7 @@ server.addResourceTemplate({
   uriTemplate: "knesset://knesset-members/{knessetNum}",
   name: "Knesset Members",
   description: "Get members of a specific Knesset by Knesset number",
-}, async (request) => {
+}, async (request: ResourceRequest) => {
   const knessetNum = request.uri.split("/").pop();
   
   try {
@@ -211,25 +229,30 @@ server.addResourceTemplate({
         text: JSON.stringify(data.value, null, 2)
       }]
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       contents: [{
         uri: request.uri,
         mimeType: "application/json",
-        text: JSON.stringify({ error: `Failed to fetch Knesset members: ${error.message}` }, null, 2)
+        text: JSON.stringify({ error: `Failed to fetch Knesset members: ${errorMessage}` }, null, 2)
       }]
     };
   }
 });
 
 // Tool definitions
+interface BillInfoParams {
+  billId: number;
+}
+
 server.tool(
   "get-bill-info",
   "Get detailed information about a specific bill by ID",
   {
     billId: z.number().int().positive().describe("The unique identifier of the bill"),
   },
-  async ({ billId }) => {
+  async ({ billId }: ToolRequest<BillInfoParams>) => {
     try {
       const data = await fetchOdataApi(`KNS_Bill(${billId})`);
       
@@ -246,7 +269,7 @@ server.tool(
       }
       
       // Get the bill initiators if available
-      let initiators = [];
+      let initiators: any[] = [];
       try {
         const initiatorsData = await fetchOdataApi(`KNS_Bill(${billId})`, { $expand: 'KNS_BillInitiators' });
         if (initiatorsData && initiatorsData.KNS_BillInitiators) {
@@ -271,7 +294,7 @@ server.tool(
       
       if (initiators.length > 0) {
         response.push("\nInitiators:");
-        initiators.forEach((initiator, index) => {
+        initiators.forEach((initiator: any, index: number) => {
           response.push(`${index + 1}. PersonID: ${initiator.PersonID}, Ordinal: ${initiator.Ordinal}, IsInitiator: ${initiator.IsInitiator ? 'Yes' : 'No'}`);
         });
       }
@@ -285,12 +308,13 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: "text",
-            text: `Error fetching bill information: ${error.message}`
+            text: `Error fetching bill information: ${errorMessage}`
           }
         ],
         isError: true
@@ -299,6 +323,11 @@ server.tool(
   }
 );
 
+interface SearchBillsParams {
+  keyword: string;
+  knessetNum?: number;
+}
+
 server.tool(
   "search-bills-by-name",
   "Search for bills by keyword in their name",
@@ -306,7 +335,7 @@ server.tool(
     keyword: z.string().min(2).describe("Keyword to search for in bill names"),
     knessetNum: z.number().int().positive().optional().describe("Optional Knesset number to filter by"),
   },
-  async ({ keyword, knessetNum }) => {
+  async ({ keyword, knessetNum }: ToolRequest<SearchBillsParams>) => {
     try {
       let filter = `substringof('${keyword}', Name)`;
       if (knessetNum) {
@@ -333,7 +362,7 @@ server.tool(
       
       const response = [`Found ${data.value.length} bills matching "${keyword}":\n`];
       
-      data.value.forEach((bill, index) => {
+      data.value.forEach((bill: any, index: number) => {
         response.push(`${index + 1}. Bill ID: ${bill.BillID}`);
         response.push(`   Name: ${bill.Name || 'N/A'}`);
         response.push(`   Knesset #: ${bill.KnessetNum || 'N/A'}`);
@@ -350,12 +379,13 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: "text",
-            text: `Error searching for bills: ${error.message}`
+            text: `Error searching for bills: ${errorMessage}`
           }
         ],
         isError: true
@@ -364,13 +394,17 @@ server.tool(
   }
 );
 
+interface CommitteeInfoParams {
+  committeeId: number;
+}
+
 server.tool(
   "get-committee-info",
   "Get information about a specific committee by ID",
   {
     committeeId: z.number().int().positive().describe("The unique identifier of the committee"),
   },
-  async ({ committeeId }) => {
+  async ({ committeeId }: ToolRequest<CommitteeInfoParams>) => {
     try {
       const data = await fetchOdataApi(`KNS_Committee(${committeeId})`);
       
@@ -408,12 +442,13 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: "text",
-            text: `Error fetching committee information: ${error.message}`
+            text: `Error fetching committee information: ${errorMessage}`
           }
         ],
         isError: true
@@ -422,13 +457,17 @@ server.tool(
   }
 );
 
+interface KnessetMemberParams {
+  personId: number;
+}
+
 server.tool(
   "get-knesset-member",
   "Get information about a specific Knesset member by ID",
   {
     personId: z.number().int().positive().describe("The unique identifier of the Knesset member"),
   },
-  async ({ personId }) => {
+  async ({ personId }: ToolRequest<KnessetMemberParams>) => {
     try {
       const data = await fetchOdataApi(`KNS_Person(${personId})`);
       
@@ -445,7 +484,7 @@ server.tool(
       }
       
       // Get the positions for this person
-      let positions = [];
+      let positions: any[] = [];
       try {
         const positionsData = await fetchOdataApi(`KNS_PersonToPosition()`, { 
           $filter: `PersonID eq ${personId}`,
@@ -470,7 +509,7 @@ server.tool(
       
       if (positions.length > 0) {
         response.push("\nPositions:");
-        positions.forEach((position, index) => {
+        positions.forEach((position: any, index: number) => {
           response.push(`${index + 1}. Knesset #: ${position.KnessetNum}, Position: ${position.PositionID}`);
           if (position.FactionName) response.push(`   Faction: ${position.FactionName}`);
           if (position.GovMinistryName) response.push(`   Ministry: ${position.GovMinistryName}`);
@@ -490,12 +529,13 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: "text",
-            text: `Error fetching Knesset member information: ${error.message}`
+            text: `Error fetching Knesset member information: ${errorMessage}`
           }
         ],
         isError: true
@@ -538,12 +578,13 @@ server.tool(
         ],
         isError: false
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: "text",
-            text: `Error fetching current Knesset information: ${error.message}`
+            text: `Error fetching current Knesset information: ${errorMessage}`
           }
         ],
         isError: true
@@ -563,7 +604,7 @@ server.prompt(
       required: true
     }
   ],
-  async (request) => {
+  async (request: PromptRequest) => {
     const billId = request.arguments?.billId;
     
     try {
@@ -586,7 +627,7 @@ server.prompt(
       }
       
       // Get additional bill information
-      let initiators = [];
+      let initiators: any[] = [];
       try {
         const initiatorsData = await fetchOdataApi(`KNS_Bill(${billId})`, { $expand: 'KNS_BillInitiators' });
         if (initiatorsData && initiatorsData.KNS_BillInitiators) {
@@ -611,7 +652,7 @@ server.prompt(
       
       if (initiators.length > 0) {
         billDetails.push("\nInitiators:");
-        initiators.forEach((initiator, index) => {
+        initiators.forEach((initiator: any, index: number) => {
           billDetails.push(`${index + 1}. PersonID: ${initiator.PersonID}, Is Primary Initiator: ${initiator.IsInitiator ? 'Yes' : 'No'}`);
         });
       }
@@ -629,7 +670,8 @@ server.prompt(
         ]
       };
       
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         description: "Error fetching bill information",
         messages: [
@@ -637,7 +679,7 @@ server.prompt(
             role: "user",
             content: {
               type: "text",
-              text: `I intended to analyze the legislative process of bill ID ${billId}, but encountered this error: ${error.message}`
+              text: `I intended to analyze the legislative process of bill ID ${billId}, but encountered this error: ${errorMessage}`
             }
           }
         ]
@@ -661,7 +703,7 @@ server.prompt(
       required: false
     }
   ],
-  async (request) => {
+  async (request: PromptRequest) => {
     const topic = request.arguments?.topic;
     const knessetNum = request.arguments?.knessetNum;
     
@@ -692,7 +734,7 @@ server.prompt(
         };
       }
       
-      const bills = data.value.map((bill, index) => {
+      const bills = data.value.map((bill: any, index: number) => {
         return `${index + 1}. Bill ID: ${bill.BillID}\n   Name: ${bill.Name || 'N/A'}\n   Knesset #: ${bill.KnessetNum || 'N/A'}\n   Type: ${bill.SubTypeDesc || 'N/A'}\n`;
       });
       
@@ -709,7 +751,8 @@ server.prompt(
         ]
       };
       
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         description: "Error searching for legislation",
         messages: [
@@ -717,7 +760,7 @@ server.prompt(
             role: "user",
             content: {
               type: "text",
-              text: `I intended to search for legislation related to "${topic}" ${knessetNum ? `from Knesset #${knessetNum}` : ''}, but encountered this error: ${error.message}`
+              text: `I intended to search for legislation related to "${topic}" ${knessetNum ? `from Knesset #${knessetNum}` : ''}, but encountered this error: ${errorMessage}`
             }
           }
         ]
@@ -736,7 +779,7 @@ server.prompt(
       required: true
     }
   ],
-  async (request) => {
+  async (request: PromptRequest) => {
     const personId = request.arguments?.personId;
     
     try {
@@ -769,14 +812,15 @@ server.prompt(
           {
             role: "user",
             content: {
-              type: "text",
+                              type: "text",
               text: `Please analyze the voting record and legislative activity of Knesset member ${personName} (ID: ${personId}).\n\nPersonal details:\n- Name: ${personName}\n- Gender: ${personData.GenderDesc || 'N/A'}\n- Email: ${personData.Email || 'N/A'}\n- Currently serving: ${personData.IsCurrent ? 'Yes' : 'No'}\n\nBased on this information, please provide an analysis of this Knesset member's political background, committees they might have served on, and notable legislative contributions. Note that comprehensive voting data is not available in this request, so please focus on what can be inferred from their basic information.`
               }
             }
           ]
         };
       
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         description: "Error fetching Knesset member information",
         messages: [
@@ -784,7 +828,7 @@ server.prompt(
             role: "user",
             content: {
               type: "text",
-              text: `I intended to analyze the voting record of Knesset member with ID ${personId}, but encountered this error: ${error.message}`
+              text: `I intended to analyze the voting record of Knesset member with ID ${personId}, but encountered this error: ${errorMessage}`
             }
           }
         ]

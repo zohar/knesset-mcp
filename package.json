@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "MCP server for the Israeli Knesset parliamentary information API",
   "type": "module",
-  "main": "build/knesset-mcp-server.ts",
+  "main": "build/knesset-mcp-server.js",
   "scripts": {
     "build": "tsc",
     "start": "node build/knesset-mcp-server.js",
@@ -16,7 +16,7 @@
     "israel",
     "odata"
   ],
-  "author": "",
+  "author": "Zohar Stolar",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
