@@ -1,110 +1,91 @@
 # Knesset MCP Server
 
-A Model Context Protocol (MCP) server for accessing the Israeli Knesset's parliamentary information API. This server provides a standardized interface for AI applications like Claude to query and interact with Knesset data.
+A Model Context Protocol (MCP) server for accessing the Israeli Knesset (Parliament) information API. This server provides structured access to committee data, bills, Knesset members, and more through standardized interfaces compatible with AI assistants like Claude.
 
 ## Features
 
-- **Resources**: Access Knesset data through URI-based resources
-  - Committee information by Knesset number
-  - Committee sessions
-  - Bills by type (private, government, committee)
-  - Knesset member information
-
-- **Tools**: Execute functions to get specific information
-  - Get bill information by ID
-  - Search bills by keyword
-  - Get committee information
-  - Get Knesset member details
-  - Get current Knesset number
-
-- **Prompts**: Pre-defined prompt templates for common analysis tasks
-  - Analyze legislation process
-  - Search for legislation related to specific topics
-  - Analyze Knesset member voting records
+- Get information about Knesset committees
+- Access committee sessions and details
+- Search for bills by type (private, government, committee)
+- Get detailed information about specific bills
+- Look up Knesset members by session
 
 ## Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/knesset-mcp-server.git
-cd knesset-mcp-server
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/username/knesset-mcp.git
+   cd knesset-mcp
+   ```
 
-# Install dependencies
-npm install
-
-# Build
-npm run build
-```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
 ## Usage
 
-### Running the server
+### Running the Server
 
-```bash
-# Start the server
-npm start
-```
+1. Make the run script executable:
+   ```bash
+   chmod +x run-new-mcp-server.sh
+   ```
 
-### Using with Claude Desktop
+2. Run the server:
+   ```bash
+   ./run-new-mcp-server.sh
+   ```
 
-1. Make sure you have [Claude Desktop](https://claude.ai/download) installed
-2. Edit your Claude Desktop configuration at `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+This will compile the TypeScript code and start the MCP server. Keep this terminal window open while using the server with Claude or other MCP clients.
 
-```json
-{
-  "mcpServers": {
-    "knesset": {
-      "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/knesset-mcp-server/build/knesset-mcp-server.js"
-      ]
-    }
-  }
-}
-```
+### Integrating with Claude
 
-3. Restart Claude Desktop
-4. The Knesset MCP tools will now be available in Claude
+1. Open Claude Desktop
+2. Go to Settings (gear icon)
+3. Select the "MCP Servers" tab
+4. Click "Add New Server"
+5. Fill in the following details:
+   - **Name**: Knesset
+   - **Command**: `node [FULL_PATH_TO_YOUR_DIRECTORY]/knesset-mcp-server-fix.js`
+   
+   Replace `[FULL_PATH_TO_YOUR_DIRECTORY]` with the absolute path to your directory.
+   
+   For example: 
+   ```
+   node /path/to/your/project/knesset-mcp-server-fix.js
+   ```
 
-## API Details
+6. Click "Add Server"
 
-This server connects to the Knesset's ODATA API located at:
-`http://knesset.gov.il/Odata/ParliamentInfo.svc`
+## Available Resources
 
-### Resource URIs
+The server exposes the following resources:
 
 - `knesset://committees/{knessetNum}` - Get committees for a specific Knesset number
 - `knesset://committee/{committeeId}/sessions` - Get sessions for a specific committee
 - `knesset://bills/{billType}` - Get bills by type (private, government, committee)
 - `knesset://knesset-members/{knessetNum}` - Get members of a specific Knesset
 
-### Tools
+## Available Tools
 
 - `get-bill-info` - Get detailed information about a specific bill by ID
 - `search-bills-by-name` - Search for bills by keyword in their name
 - `get-committee-info` - Get information about a specific committee by ID
-- `get-knesset-member` - Get information about a specific Knesset member by ID
-- `get-current-knesset-number` - Get the number of the current Knesset
 
-### Prompts
+## Troubleshooting
 
-- `analyze-legislation-process` - Analyze the legislative process of a bill
-- `search-related-legislation` - Search for legislation related to a specific topic
-- `mk-voting-record` - Analyze the voting record of a Knesset member
+If you encounter connection issues:
 
-## Development
+1. Check the log file: `cat mcp-server-fix.log`
+2. Ensure the path in Claude's configuration is absolute, not relative
+3. Restart both the server and Claude
+4. Make sure your TypeScript compilation completed successfully
 
-To run the server in development mode:
+## Data Source
 
-```bash
-npm run dev
-```
-
-For testing your MCP server, you can use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-```bash
-npx @modelcontextprotocol/inspector node build/index.js
-```
+This server accesses the official Knesset OData API at:
+`http://knesset.gov.il/Odata/ParliamentInfo.svc`
 
 ## License
 

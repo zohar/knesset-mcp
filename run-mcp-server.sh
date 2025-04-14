@@ -1,12 +1,19 @@
 #!/bin/bash
 
-# Build the project
-echo "Building the project..."
-npm run build
+# Check if TypeScript is installed
+if ! command -v tsc &> /dev/null; then
+    echo "TypeScript compiler (tsc) not found. Installing..."
+    npm install -g typescript
+fi
 
-# Run the MCP server and redirect stderr to a log file
-echo "Starting the MCP server..."
-node build/knesset-mcp-server.js 2> mcp-server.log
+# Compile the TypeScript file
+echo "Compiling the knesset-mcp-server-fix.ts file..."
+npx tsc --module esnext --moduleResolution node --target es2022 --esModuleInterop true knesset-mcp-server-fix.ts
 
-# Note: To view logs in real-time in another terminal, run:
-# tail -f mcp-server.log
+# Run the compiled JavaScript
+echo "Running the MCP server..."
+node knesset-mcp-server-fix.js 2> mcp-server-fix.log
+
+# The log will be saved to mcp-server-fix.log
+# To view logs in real-time, open another terminal and run:
+# tail -f mcp-server-fix.log
