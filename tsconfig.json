@@ -10,6 +10,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["index.ts"],
+  "include": ["knesset-mcp-server.ts"],
   "exclude": ["node_modules"]
 }

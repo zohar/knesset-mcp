@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "description": "MCP server for the Israeli Knesset parliamentary information API",
   "type": "module",
-  "main": "index.js",
+  "main": "build/knesset-mcp-server.ts",
   "scripts": {
     "build": "tsc",
-    "start": "node build/index.js",
-    "dev": "ts-node-esm index.ts"
+    "start": "node build/knesset-mcp-server.js",
+    "dev": "ts-node-esm knesset-mcp-server.ts"
   },
   "keywords": [
     "mcp",
