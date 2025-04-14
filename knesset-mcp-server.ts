@@ -38,12 +38,12 @@ class KnessetMcpServer {
   private transport: any;
 
   constructor(config: { name: string, version: string, capabilities: any }) {
-    console.log(`Initializing ${config.name} v${config.version}`);
+    console.error(`Initializing ${config.name} v${config.version}`);
   }
 
   // Resources
   registerResource(template: { uriTemplate: string, name: string, description: string }, handler: Function) {
-    console.log(`Registering resource: ${template.name} - ${template.uriTemplate}`);
+    console.error(`Registering resource: ${template.name} - ${template.uriTemplate}`);
     this.resources.set(template.uriTemplate, {
       template,
       handler
@@ -53,7 +53,7 @@ class KnessetMcpServer {
 
   // Tools
   registerTool(name: string, description: string, params: any, handler: Function) {
-    console.log(`Registering tool: ${name}`);
+    console.error(`Registering tool: ${name}`);
     this.tools.set(name, {
       name,
       description,
@@ -65,7 +65,7 @@ class KnessetMcpServer {
 
   // Prompts
   registerPrompt(name: string, description: string, args: any[], handler: Function) {
-    console.log(`Registering prompt: ${name}`);
+    console.error(`Registering prompt: ${name}`);
     this.prompts.set(name, {
       name,
       description,
@@ -78,23 +78,145 @@ class KnessetMcpServer {
   // Connect to transport
   async connect(transport: any) {
     this.transport = transport;
-    console.log("Connected to transport");
+    console.error("Connected to transport");
     
     // Setup message handling
     if (this.transport.onMessage) {
       this.transport.onMessage(async (message: any) => {
         // Handle incoming messages
         try {
-          // Very basic implementation
-          console.log("Received message:", JSON.stringify(message).substring(0, 200) + "...");
+          console.error(`Received request: ${message.method}`);
           
-          // Send a simple response
-          await this.transport.sendResponse({
-            id: message.id,
-            result: { success: true }
-          });
-        } catch (error) {
+          if (message.method === "initialize") {
+            // Handle initialize request
+            await this.transport.sendResponse({
+              id: message.id,
+              result: {
+                name: "knesset-parliament-info",
+                version: "1.0.0",
+                capabilities: {
+                  resources: { subscribe: true, listChanged: true },
+                  tools: { listChanged: true },
+                  prompts: { listChanged: true }
+                }
+              }
+            });
+          } else if (message.method === "listResources") {
+            // Handle listResources request
+            const resources = Array.from(this.resources.entries()).map(([uri, resource]) => ({
+              uriTemplate: resource.template.uriTemplate,
+              name: resource.template.name,
+              description: resource.template.description
+            }));
+            
+            await this.transport.sendResponse({
+              id: message.id,
+              result: { resources }
+            });
+          } else if (message.method === "listTools") {
+            // Handle listTools request
+            const tools = Array.from(this.tools.entries()).map(([name, tool]) => ({
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.params
+            }));
+            
+            await this.transport.sendResponse({
+              id: message.id,
+              result: { tools }
+            });
+          } else if (message.method === "listPrompts") {
+            // Handle listPrompts request
+            const prompts = Array.from(this.prompts.entries()).map(([name, prompt]) => ({
+              name: prompt.name,
+              description: prompt.description,
+              arguments: prompt.args
+            }));
+            
+            await this.transport.sendResponse({
+              id: message.id,
+              result: { prompts }
+            });
+          } else if (message.method === "getResourceContent") {
+            // Handle getResourceContent request
+            const uri = message.params?.uri;
+            if (!uri) {
+              throw new Error("Missing required parameter 'uri'");
+            }
+            
+            // Find matching resource handler based on URI pattern
+            let handler = null;
+            
+            for (const [uriTemplate, resource] of this.resources.entries()) {
+              // Convert uriTemplate like "knesset://committees/{knessetNum}" 
+              // to regex pattern like "knesset://committees/([^/]+)"
+              const pattern = uriTemplate.replace(/\{([^}]+)\}/g, '([^/]+)');
+              const regex = new RegExp(`^${pattern}$`);
+              const match = uri.match(regex);
+              
+              if (match) {
+                handler = resource.handler;
+                break;
+              }
+            }
+            
+            if (!handler) {
+              throw new Error(`No handler found for URI: ${uri}`);
+            }
+            
+            const response = await handler({ uri });
+            await this.transport.sendResponse({
+              id: message.id,
+              result: response
+            });
+          } else if (message.method === "invokeTool") {
+            // Handle invokeTool request
+            const name = message.params?.name;
+            const args = message.params?.arguments || {};
+            
+            if (!name) {
+              throw new Error("Missing required parameter 'name'");
+            }
+            
+            const tool = this.tools.get(name);
+            if (!tool) {
+              throw new Error(`Tool not found: ${name}`);
+            }
+            
+            const response = await tool.handler(args);
+            await this.transport.sendResponse({
+              id: message.id,
+              result: response
+            });
+          } else if (message.method === "getPrompt") {
+            // Handle getPrompt request
+            const name = message.params?.name;
+            const args = message.params?.arguments || {};
+            
+            if (!name) {
+              throw new Error("Missing required parameter 'name'");
+            }
+            
+            const prompt = this.prompts.get(name);
+            if (!prompt) {
+              throw new Error(`Prompt not found: ${name}`);
+            }
+            
+            const response = await prompt.handler({ arguments: args });
+            await this.transport.sendResponse({
+              id: message.id,
+              result: response
+            });
+          } else {
+            // Handle unknown method
+            throw new Error(`Unknown method: ${message.method}`);
+          }
+        } catch (error: any) {
           console.error("Error handling message:", error);
+          await this.transport.sendError(message.id, {
+            code: -32603,
+            message: error.message || "Internal error"
+          });
         }
       });
     }
@@ -514,9 +636,10 @@ server.registerTool(
   }
 );
 
-// Simplified StdioServerTransport implementation
+// Improved StdioServerTransport implementation following JSON-RPC 2.0 protocol
 class StdioServerTransport {
   private messageHandlers: Array<(message: any) => void> = [];
+  private debug: boolean = false;
 
   constructor() {
     // Set up stdin/stdout handling
@@ -526,6 +649,7 @@ class StdioServerTransport {
         const lines = data.trim().split('\n');
         for (const line of lines) {
           if (line.trim()) {
+            if (this.debug) console.error(`[DEBUG] Received: ${line}`);
             const message = JSON.parse(line);
             this.messageHandlers.forEach(handler => handler(message));
           }
@@ -541,8 +665,34 @@ class StdioServerTransport {
   }
 
   async sendResponse(response: any) {
-    const responseText = JSON.stringify(response);
+    // Format as proper JSON-RPC 2.0 response
+    const jsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: response.id,
+      result: response.result
+    };
+    
+    const responseText = JSON.stringify(jsonRpcResponse);
+    if (this.debug) console.error(`[DEBUG] Sending: ${responseText}`);
     process.stdout.write(responseText + '\n');
+    return true;
+  }
+
+  async sendError(id: string | number | null, error: any) {
+    // Format as proper JSON-RPC 2.0 error response
+    const jsonRpcError = {
+      jsonrpc: "2.0",
+      id: id,
+      error: {
+        code: error.code || -32603,
+        message: error.message || "Internal error",
+        data: error.data
+      }
+    };
+    
+    const errorText = JSON.stringify(jsonRpcError);
+    if (this.debug) console.error(`[DEBUG] Sending error: ${errorText}`);
+    process.stdout.write(errorText + '\n');
     return true;
   }
 }
