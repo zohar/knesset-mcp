@@ -95,11 +95,21 @@ class KnessetMcpServer {
           
           if (message.method === "initialize") {
             // Handle initialize request
+            const protocolVersion = message.params?.protocolVersion || "unknown";
+            const clientName = message.params?.clientInfo?.name || "unknown";
+            const clientVersion = message.params?.clientInfo?.version || "unknown";
+            
+            console.error(`Client connected: ${clientName} v${clientVersion} using protocol ${protocolVersion}`);
+            
+            // Respond with server capabilities
             await this.transport.sendResponse({
               id: message.id,
               result: {
-                name: "knesset-parliament-info",
-                version: "1.0.0",
+                protocolVersion: "2024-11-05",
+                serverInfo: {
+                  name: "knesset-parliament-info",
+                  version: "1.0.0"
+                },
                 capabilities: {
                   resources: { subscribe: true, listChanged: true },
                   tools: { listChanged: true },
@@ -751,6 +761,19 @@ async function main() {
       console.error('Unhandled rejection at:', promise, 'reason:', reason);
     });
     
+    // Make stdin non-blocking and ensure it stays open
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+    
+    // Make sure process doesn't exit on SIGINT
+    process.on('SIGINT', () => {
+      console.error('Received SIGINT, ignoring...');
+    });
+    
+    process.on('exit', (code) => {
+      console.error(`Process exiting with code: ${code}`);
+    });
+    
     const transport = new StdioServerTransport();
     await server.connect(transport);
     
@@ -759,7 +782,7 @@ async function main() {
     // Keep the process alive
     setInterval(() => {
       // Heartbeat
-    }, 5000);
+    }, 1000);
   } catch (error) {
     console.error("Error in main:", error);
   }
