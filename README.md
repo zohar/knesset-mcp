@@ -56,7 +56,7 @@ npm start
     "knesset": {
       "command": "node",
       "args": [
-        "/ABSOLUTE/PATH/TO/knesset-mcp-server/build/index.js"
+        "/ABSOLUTE/PATH/TO/knesset-mcp-server/build/knesset-mcp-server.js"
       ]
     }
   }
