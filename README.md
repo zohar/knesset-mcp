@@ -33,16 +33,16 @@ npm run dev     # run TypeScript directly via ts-node
 {
   "mcpServers": {
     "knesset": {
-      "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/knesset-mcp-server/build/knesset-mcp-server.js"
-      ]
+      "command": "npx",
+      "args": ["-y", "knesset-mcp"]
     }
   }
 }
 ```
 
 3. Restart Claude Desktop — the Knesset tools will be available.
+
+The `npx -y` flag auto-installs the package on first run and caches it. Requires Node.js >= 20.10.0.
 
 ## Tools
 
