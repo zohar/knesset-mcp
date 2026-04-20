@@ -1,8 +1,0 @@
-{                                                                                                                                                                              
-  "mcpServers": {                                                               
-    "knesset": {                       
-      "command": "node",
-      "args": ["/Users/zohar/apps/knesset-mcp/build/knesset-mcp-server.js"]
-    }                                                                                                                                                                          
-  }
-} 
