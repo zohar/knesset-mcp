@@ -19,8 +19,8 @@
   "author": "Zohar Stolar",
   "license": "MIT",
   "dependencies": {
-    "node-fetch": "^3.3.2",
-    "zod": "^3.22.2"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.8.0",
