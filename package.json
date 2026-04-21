@@ -1,6 +1,6 @@
 {
   "name": "knesset-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP server for the Israeli Knesset parliamentary information API",
   "type": "module",
   "main": "build/knesset-mcp-server.js",
