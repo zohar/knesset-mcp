@@ -61,9 +61,17 @@ The `npx -y` flag auto-installs the package on first run and caches it. Requires
 - `get-committee-info` — Committee details by `CommitteeID`.
 - `list-committees` — Committees for a given Knesset number, with optional `onlyCurrent` filter.
 
-### Members
+### Members & Factions
 
-- `list-knesset-members` — Members (MKs) of a given Knesset (PositionID=43).
+- `list-factions` — Lists parties (factions) in a given Knesset. Use this first to find the `FactionID` of the party you care about. Optional `onlyCurrent` filter to exclude factions that have disbanded or merged.
+- `list-knesset-members` — Lists Knesset members (MKs) with their party affiliation. Optional `factionId` filter returns only members of a specific party (pair with `list-factions` to discover IDs). Optional `onlyCurrent` filter limits results to active memberships.
+
+**How to get a party's MK roster:**
+
+1. Call `list-factions` with the Knesset number → find the `FactionID` of the party.
+2. Call `list-knesset-members` with that `knessetNum` and `factionId` → get the member list.
+
+Note: an MK who switched parties mid-term appears once per stint. Pass `onlyCurrent: true` to see only the active membership.
 
 ## API
 
