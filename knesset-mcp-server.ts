@@ -351,35 +351,81 @@ server.registerTool(
 server.registerTool(
   "list-knesset-members",
   {
-    description: "List Knesset members (MKs) for a given Knesset number. Uses PositionID=43 (חבר כנסת).",
+    description:
+      "List Knesset members (MKs) with party (faction) affiliation for a given Knesset. Uses PositionID=54 on KNS_PersonToPosition, which is the row that carries FactionID/FactionName (PositionID=43 exists but has null faction fields). Optionally filter by factionId — use list-factions to discover IDs. Note: an MK who switched factions mid-term appears once per stint.",
     inputSchema: {
       knessetNum: z.number().int().positive().describe("Knesset number"),
+      factionId: z.number().int().positive().optional().describe("Optional KNS_Faction FactionID to filter to one party"),
+      onlyCurrent: z.boolean().optional().describe("If true, only current memberships (IsCurrent=true)"),
       limit: z.number().int().positive().max(200).optional().describe("Max members to return (default 150)"),
     },
   },
-  async ({ knessetNum, limit }) => {
+  async ({ knessetNum, factionId, onlyCurrent, limit }) => {
     try {
+      let filter = `KnessetNum eq ${knessetNum} and PositionID eq 54`;
+      if (factionId) filter += ` and FactionID eq ${factionId}`;
+      if (onlyCurrent) filter += ` and IsCurrent eq true`;
       const data = await fetchOdataApi("KNS_PersonToPosition()", {
-        $filter: `KnessetNum eq ${knessetNum} and PositionID eq 43`,
+        $filter: filter,
         $expand: "KNS_Person",
+        $orderby: "FactionID asc",
         $top: String(limit ?? 150),
       });
       const rows = Array.isArray(data?.value) ? data.value : [];
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: `No members found for Knesset ${knessetNum}.` }] };
+        return { content: [{ type: "text", text: `No members found for Knesset ${knessetNum}${factionId ? ` in faction ${factionId}` : ""}.` }] };
       }
-      const lines = [`Found ${rows.length} members for Knesset ${knessetNum}:\n`];
+      const header = factionId
+        ? `Found ${rows.length} members in Knesset ${knessetNum} faction ${factionId}:`
+        : `Found ${rows.length} members for Knesset ${knessetNum}:`;
+      const lines = [header + "\n"];
       rows.forEach((r: any, i: number) => {
         const p = r.KNS_Person || {};
         const name = [p.FirstName, p.LastName].filter(Boolean).join(" ") || "N/A";
         lines.push(`${i + 1}. PersonID: ${r.PersonID} — ${name}`);
-        lines.push(`   Faction ID: ${r.FactionID ?? "N/A"}`);
-        lines.push(`   Start: ${r.StartDate || "N/A"}   Finish: ${r.FinishDate || "N/A"}`);
+        lines.push(`   Faction: ${r.FactionName || "N/A"} (ID: ${r.FactionID ?? "N/A"})`);
+        lines.push(`   Start: ${r.StartDate || "N/A"}   Finish: ${r.FinishDate || "N/A"}   Current: ${r.IsCurrent ? "Yes" : "No"}`);
         lines.push("");
       });
       return { content: [{ type: "text", text: lines.join("\n") }] };
     } catch (error) {
       return errorResult("Error listing Knesset members", error);
+    }
+  },
+);
+
+server.registerTool(
+  "list-factions",
+  {
+    description: "List factions (parties) for a given Knesset number. Use the returned FactionID with list-knesset-members to get party rosters.",
+    inputSchema: {
+      knessetNum: z.number().int().positive().describe("Knesset number"),
+      onlyCurrent: z.boolean().optional().describe("If true, only currently active factions"),
+      limit: z.number().int().positive().max(200).optional().describe("Max factions to return (default 50)"),
+    },
+  },
+  async ({ knessetNum, onlyCurrent, limit }) => {
+    try {
+      let filter = `KnessetNum eq ${knessetNum}`;
+      if (onlyCurrent) filter += ` and IsCurrent eq true`;
+      const data = await fetchOdataApi("KNS_Faction()", {
+        $filter: filter,
+        $orderby: "Name asc",
+        $top: String(limit ?? 50),
+      });
+      const factions = Array.isArray(data?.value) ? data.value : [];
+      if (factions.length === 0) {
+        return { content: [{ type: "text", text: `No factions found for Knesset ${knessetNum}.` }] };
+      }
+      const lines = [`Found ${factions.length} factions for Knesset ${knessetNum}:\n`];
+      factions.forEach((f: any, i: number) => {
+        lines.push(`${i + 1}. Faction ID: ${f.FactionID} — ${f.Name || "N/A"}`);
+        lines.push(`   Current: ${f.IsCurrent ? "Yes" : "No"}   Start: ${f.StartDate || "N/A"}   Finish: ${f.FinishDate || "N/A"}`);
+        lines.push("");
+      });
+      return { content: [{ type: "text", text: lines.join("\n") }] };
+    } catch (error) {
+      return errorResult("Error listing factions", error);
     }
   },
 );
