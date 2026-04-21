@@ -73,6 +73,66 @@ The `npx -y` flag auto-installs the package on first run and caches it. Requires
 
 Note: an MK who switched parties mid-term appears once per stint. Pass `onlyCurrent: true` to see only the active membership.
 
+## Example prompts
+
+Sample prompts in Hebrew you can try once the server is wired up. Each one exercises a specific tool or combination of tools.
+
+### Single-tool prompts
+
+**`list-factions`**
+- "אילו סיעות פעילות כיום בכנסת ה-25?"
+- "תראה לי את כל הסיעות שהיו בכנסת ה-24, כולל כאלה שהתפצלו או התאחדו."
+
+**`list-knesset-members`**
+- "מי חברי סיעת הליכוד בכנסת הנוכחית?"
+- "תן לי את רשימת כל חברי הכנסת המכהנים כרגע בכנסת ה-25."
+
+**`list-committees`**
+- "אילו ועדות פעילות היום בכנסת?"
+- "מה הן כל הוועדות שפעלו בכנסת ה-24?"
+
+**`get-committee-info`**
+- "תן לי פרטים על ועדת הכספים."
+- "מה המידע על הוועדה עם המזהה 2010?"
+
+**`search-bills-by-name`**
+- "חפש הצעות חוק שמכילות את המילה 'פנסיה'."
+- "מצא הצעות חוק על 'דיור ציבורי' בכנסת ה-25."
+
+**`list-bills-by-type`**
+- "תראה לי את הצעות החוק הממשלתיות האחרונות בכנסת ה-25."
+- "מה הן 20 הצעות החוק הפרטיות העדכניות ביותר?"
+
+**`list-bills-by-status`**
+- "אילו הצעות חוק עברו בקריאה שלישית לאחרונה (סטטוס 118)?"
+- "תן לי את הצעות החוק שאושרו בוועדה לקריאה שנייה ושלישית בכנסת ה-25."
+
+**`list-recent-bills-by-stage`**
+- "אילו חוקים עברו ונכנסו לספר החוקים לאחרונה?"
+- "תן לי את ההצעות שאושרו בקריאה ראשונה בכנסת הנוכחית."
+
+**`get-bill-info`**
+- "תן לי את כל הפרטים והיוזמים של הצעת החוק עם המזהה 2145694."
+- "מי יזם את הצעת החוק הזו ומה הסטטוס הנוכחי שלה? (BillID: ...)"
+
+### Multi-tool prompts
+
+**Two tools**
+- "תראה לי את כל הסיעות החרדיות בכנסת ה-25, ואז פרט את חברי הכנסת של 'יהדות התורה'." → `list-factions` + `list-knesset-members`
+- "חפש הצעות חוק על 'אלימות במשפחה' בכנסת הנוכחית, ואז תן לי את הפרטים המלאים והיוזמים של הכי רלוונטית." → `search-bills-by-name` + `get-bill-info`
+- "תראה לי את כל הוועדות הפעילות בכנסת, ואז תן לי את המידע המפורט על ועדת החוקה." → `list-committees` + `get-committee-info`
+- "אילו חוקים עברו בקריאה שלישית לאחרונה? בחר את 3 החשובים ביותר ותן לי פרטים על כל אחד." → `list-recent-bills-by-stage` + `get-bill-info`
+
+**Three tools**
+- "מצא את הסיעה 'יש עתיד' בכנסת ה-25, ראה מי חבריה, ואז חפש הצעות חוק שמזכירות אחד מהם בשם — בחר את מרב מיכאלי לדוגמה." → `list-factions` + `list-knesset-members` + `search-bills-by-name`
+- "תראה לי 10 הצעות חוק ממשלתיות אחרונות ו-10 הצעות פרטיות אחרונות, ואז פרט את ההצעה הפרטית שהכי מתקדמת בתהליך החקיקה." → `list-bills-by-type` (×2) + `get-bill-info`
+- "חפש הצעות חוק על 'תחבורה ציבורית', סנן את אלו שאושרו לקריאה ראשונה (סטטוס 109), ותן לי פרטים על הפעילה ביותר." → `search-bills-by-name` + `list-bills-by-status` + `get-bill-info`
+
+**Four or more tools**
+- "צור לי פרופיל שלם של סיעת 'העבודה' בכנסת ה-25: רשימת החברים, באילו ועדות הם פעילים, ודוגמה להצעת חוק שהם יזמו. התחל ממציאת מזהה הסיעה." → `list-factions` + `list-knesset-members` + `list-committees` + `search-bills-by-name` + `get-bill-info`
+- "הכן לי סיכום חקיקה: 5 חוקים שעברו לאחרונה, 5 הצעות שאושרו לקריאה שנייה-שלישית, ו-5 הצעות שאושרו לקריאה ראשונה — עבור הכנסת הנוכחית. עבור החוק החשוב ביותר שעבר, תן לי את הפרטים המלאים." → `list-recent-bills-by-stage` (×3) + `get-bill-info`
+- "אני מתעניין בחקיקת סביבה. חפש הצעות חוק על 'אקלים' ו'זיהום', תן לי פרטים על כל אחת כולל היוזמים, ובדוק לאיזו סיעה משתייך כל יוזם — האם זה חוצה קואליציה/אופוזיציה?" → `search-bills-by-name` + `get-bill-info` + `list-factions` + `list-knesset-members`
+
 ## API
 
 Backed by the Knesset OData service at:
